@@ -119,10 +119,11 @@ curl -X DELETE https://your-worker.workers.dev/api/keys \
 ## How the Key Pool Works
 
 1. When a tool is called, `KV.list()` retrieves all stored API keys
-2. The key with the **largest remaining credit** is selected
+2. A random key with remaining credit is selected
 3. The request is proxied to `api.tavily.com` using that key
 4. After the call, the estimated credit cost is deducted locally in KV
 5. When a key is added via `/api/keys`, its real remaining credit is fetched from Tavily's `/usage` endpoint
+6. Every day at 00:00 Asia/Shanghai, all keys are refreshed from `/usage`; failed refreshes keep their cached values
 
 ## License
 

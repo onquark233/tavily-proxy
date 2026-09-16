@@ -12,6 +12,10 @@ binding = "KV"
 id = "8c9031329f264adb85952b069e2b5cce"
 preview_id = "local-dev-kv"
 
+# Cloudflare cron expressions use UTC. 16:00 UTC is 00:00 Asia/Shanghai.
+[triggers]
+crons = ["0 16 * * *"]
+
 [observability]
 [observability.logs]
 enabled = true

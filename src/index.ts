@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { toFetchResponse, toReqRes } from "fetch-to-node";
 import { z } from "zod";
 import * as tavilyClient from "./tavily-client.js";
-import { pickBestKey, addKey, deleteKey, listKeys, deductCredit, maybeSyncKeyUsage, invalidateKey } from "./key-pool.js";
+import { pickBestKey, addKey, deleteKey, listKeys, deductCredit, invalidateKey, syncAllKeyUsage } from "./key-pool.js";
 
 type Env = {
   KV: KVNamespace;
@@ -55,7 +55,14 @@ async function withKeyFallback(
     console.log(`[MCP] ${toolName} using key: ${apiKey.substring(0, 13)}...`);
     try {
       const result = await fn(apiKey);
-      await postSuccess(apiKey);
+      try {
+        await postSuccess(apiKey);
+      } catch (err) {
+        console.error(
+          `[MCP] ${toolName} succeeded but failed to update cached credit for key ${apiKey.substring(0, 13)}...:`,
+          err
+        );
+      }
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
@@ -160,7 +167,6 @@ function createMcpServer(kv: KVNamespace) {
         (apiKey) => tavilyClient.search(apiKey, params),
         async (apiKey) => {
           await deductCredit(kv, apiKey, cost);
-          await maybeSyncKeyUsage(kv, apiKey);
         }
       );
     }
@@ -209,7 +215,6 @@ function createMcpServer(kv: KVNamespace) {
         (apiKey) => tavilyClient.extract(apiKey, params),
         async (apiKey) => {
           await deductCredit(kv, apiKey, cost);
-          await maybeSyncKeyUsage(kv, apiKey);
         }
       );
     }
@@ -297,7 +302,6 @@ function createMcpServer(kv: KVNamespace) {
         (apiKey) => tavilyClient.crawl(apiKey, params),
         async (apiKey) => {
           await deductCredit(kv, apiKey, 2);
-          await maybeSyncKeyUsage(kv, apiKey);
         }
       );
     }
@@ -363,7 +367,6 @@ function createMcpServer(kv: KVNamespace) {
         (apiKey) => tavilyClient.map(apiKey, params),
         async (apiKey) => {
           await deductCredit(kv, apiKey, 1);
-          await maybeSyncKeyUsage(kv, apiKey);
         }
       );
     }
@@ -471,4 +474,9 @@ app.get("/", (c) => {
   });
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(syncAllKeyUsage(env.KV));
+  },
+} satisfies ExportedHandler<Env>;

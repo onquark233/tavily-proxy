@@ -9,6 +9,29 @@ export interface KeyInfo {
   remainingCredit: number;
 }
 
+interface UsageResponse {
+  key: {
+    usage: number;
+    limit: number | null;
+  };
+  account: {
+    plan_limit: number;
+    plan_usage: number;
+  };
+}
+
+export interface SyncAllKeyUsageResult {
+  updated: number;
+  failed: number;
+}
+
+function requireFiniteNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Invalid Tavily usage response: ${field} is not a finite number`);
+  }
+  return value;
+}
+
 /**
  * Query the Tavily /usage endpoint to get remaining credits for a key.
  */
@@ -26,16 +49,20 @@ export async function queryRemainingCredit(apiKey: string): Promise<number> {
     throw new Error(`Failed to query usage for key: ${res.status} ${text}`);
   }
 
-  const data = (await res.json()) as {
-    key: { usage: number; limit: number | null };
-    account: { plan_limit: number; plan_usage: number };
-  };
+  const data = (await res.json()) as UsageResponse;
 
   console.log(`[usage] key=${keyPrefix}... response=${JSON.stringify(data)}`);
 
-  // remaining = limit - usage. If limit is null (unlimited), report a large number.
-  const limit = data.key.limit ?? data.account.plan_limit;
-  const usage = data.key.usage;
+  let limit: number;
+  let usage: number;
+  if (data.key.limit === null) {
+    limit = requireFiniteNumber(data.account.plan_limit, "account.plan_limit");
+    usage = requireFiniteNumber(data.account.plan_usage, "account.plan_usage");
+  } else {
+    limit = requireFiniteNumber(data.key.limit, "key.limit");
+    usage = requireFiniteNumber(data.key.usage, "key.usage");
+  }
+
   return Math.max(0, limit - usage);
 }
 
@@ -118,19 +145,45 @@ export async function invalidateKey(kv: KVNamespace, apiKey: string): Promise<vo
 }
 
 /**
- * Query the real usage from Tavily and update KV after each MCP tool call.
+ * Refresh every key from Tavily in bounded batches. Failed queries retain their
+ * existing cached values so a transient usage API failure cannot disable a key.
  */
-export async function maybeSyncKeyUsage(kv: KVNamespace, apiKey: string): Promise<void> {
-  try {
-    const remaining = await queryRemainingCredit(apiKey);
-    await kv.put(apiKey, String(remaining));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (/429/.test(message)) {
-      console.error(`[sync] Rate limited (429) for key ${apiKey.substring(0, 13)}..., keeping cached value`);
-      return;
+export async function syncAllKeyUsage(kv: KVNamespace): Promise<SyncAllKeyUsageResult> {
+  const concurrency = 5;
+  let cursor: string | undefined;
+  let updated = 0;
+  let failed = 0;
+
+  do {
+    const page = await kv.list({ cursor });
+
+    for (let i = 0; i < page.keys.length; i += concurrency) {
+      const batch = page.keys.slice(i, i + concurrency);
+      const results = await Promise.allSettled(
+        batch.map(async ({ name: apiKey }) => {
+          const remaining = await queryRemainingCredit(apiKey);
+          await kv.put(apiKey, String(remaining));
+        })
+      );
+
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          updated++;
+          return;
+        }
+
+        failed++;
+        const apiKey = batch[index].name;
+        console.error(
+          `[cron] Failed to sync key ${apiKey.substring(0, 13)}..., keeping cached value:`,
+          result.reason
+        );
+      });
     }
-    console.error(`[sync] Failed to sync usage for key ${apiKey.substring(0, 13)}...:`, err);
-    await kv.put(apiKey, "0");
-  }
+
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  console.log(`[cron] Usage sync complete: updated=${updated}, failed=${failed}`);
+  return { updated, failed };
 }
