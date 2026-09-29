@@ -1,1 +1,2 @@
-AUTH_KEY=test-secret-key # Auth key clients must send via the x-api-key header
+# Auth key clients must send via the x-api-key header. Required: generate one with `openssl rand -hex 32`.
+AUTH_KEY=

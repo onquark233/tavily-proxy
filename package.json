@@ -26,7 +26,7 @@
   "cloudflare": {
     "bindings": {
       "AUTH_KEY": {
-        "description": "Secret that clients must send in the `x-api-key` header. Generate a random string, e.g. `openssl rand -hex 32`."
+        "description": "**Required.** Secret that clients must send in the `x-api-key` header. If left empty, all API requests are rejected. Generate a random string, e.g. `openssl rand -hex 32`."
       },
       "KV": {
         "description": "KV namespace that stores the Tavily API key pool and cached remaining credits."

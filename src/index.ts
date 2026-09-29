@@ -22,6 +22,10 @@ app.use("*", async (c, next) => {
     return next();
   }
 
+  if (!c.env.AUTH_KEY) {
+    return c.json({ error: "AUTH_KEY is not configured. Set it via `wrangler secret put AUTH_KEY` or Worker Settings > Variables and Secrets." }, 500);
+  }
+
   const provided = c.req.header("x-api-key");
   if (!provided || provided !== c.env.AUTH_KEY) {
     return c.json({ error: "Unauthorized: invalid or missing x-api-key header" }, 401);
