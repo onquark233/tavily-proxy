@@ -22,5 +22,15 @@
     "@cloudflare/workers-types": "^4.20260305.0",
     "typescript": "^5.9.3",
     "wrangler": "^4.69.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "AUTH_KEY": {
+        "description": "Secret that clients must send in the `x-api-key` header. Generate a random string, e.g. `openssl rand -hex 32`."
+      },
+      "KV": {
+        "description": "KV namespace that stores the Tavily API key pool and cached remaining credits."
+      }
+    }
   }
 }

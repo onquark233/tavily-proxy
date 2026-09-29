@@ -1,5 +1,7 @@
 # tavily-proxy
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sunwu51/tavily-proxy)
+
 A Cloudflare Worker that acts as an MCP (Model Context Protocol) proxy for the [Tavily API](https://tavily.com). It provides the same tools as the official Tavily MCP server, but with an **API key pool** — automatically rotating through multiple Tavily keys and selecting the one with the most remaining credit.
 
 ## Features
@@ -45,7 +47,11 @@ npm run dev
 
 Wrangler simulates KV locally — no Cloudflare account needed for development.
 
-### Deploy to Production
+### One-Click Deploy
+
+Click the **Deploy to Cloudflare** button above. Cloudflare will fork this repo into your GitHub account, automatically create the KV namespace, prompt you for the `AUTH_KEY` secret, and deploy the Worker. Then add your Tavily keys (see step 5 below).
+
+### Deploy to Production (Manual)
 
 1. **Create a KV namespace:**
    ```bash

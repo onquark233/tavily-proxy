@@ -1,0 +1,1 @@
+AUTH_KEY=test-secret-key # Auth key clients must send via the x-api-key header
